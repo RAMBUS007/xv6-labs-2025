@@ -76,6 +76,30 @@ usertrap(void)
   if(p->killed)
     exit(-1);
 
+  // 如果是时钟中断，且当前开启了alarm功能并且没有处于其他响应过程中，则开始处理中断
+  // p->AlarmInteval == 0表示我们当前关闭了alarm，因此不要响应
+  // p->InHandler == 0表示当前进程没有在处理alarm流程中，可以进行下一次响应
+  if(which_dev ==  2 && p->AlarmInteval != 0 && p->InHandler == 0)     
+  {
+    // 记录当前已经经过的ticks总数，计数器加一
+    p->Counter ++;             
+	
+	  // 如果到了应该触发handler的间隔时间         
+    if(p->Counter == p->AlarmInteval)                                   
+    {
+      // 首先将trapframe完整保存在proc的alarmframe中
+      // 这是为了以后可以不受影响地回到原有进程中执行
+      // 出于便利，我选择直接将trapframe中的所有信息保存下来
+      memmove(p->alarmframe, p->trapframe, 
+              sizeof(struct trapframe));                                
+      
+      // 修改trapframe中的epc，使得陷阱将会返回到用户态下的handler函数中
+      p->trapframe->epc = p->Handler;                                  
+      // 设置标志位，表明当前进程正处于alarm的处理流程中，不再响应其他alarm
+      p->InHandler = 1;                                                
+    }
+  }
+
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
