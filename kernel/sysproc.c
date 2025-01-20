@@ -46,9 +46,21 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
-  addr = myproc()->sz;
-  if(growproc(n) < 0)
+  struct proc* p = myproc();
+  // 保存原本旧的sz
+  addr = p->sz;
+  int sz = p->sz;
+  if(n > 0){
+    // 对于内存增加情况，直接增大p->sz
+    p->sz += n;
+  }else if(n == 0){
     return -1;
+  }else if(sz + n > 0){
+     // 对于内存减少的情况，需要解映射，同时修改解映射后的p->sz
+    sz = uvmdealloc(p->pagetable, sz, sz + n);
+    p->sz = sz;
+  }
+  // 返回旧地址
   return addr;
 }
 
