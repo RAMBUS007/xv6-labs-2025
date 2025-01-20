@@ -170,6 +170,7 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
+pte_t *         walk(pagetable_t, uint64, int);
 
 // plic.c
 void            plicinit(void);
@@ -184,3 +185,10 @@ void            virtio_disk_intr(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+// LAB COW
+int             get_mem_count(uint64 pa);
+void            mem_count_up(uint64 pa);
+int             mem_count_down(uint64 pa);
+void            mem_count_set_one(uint64 pa);
+pte_t*          cow_walk(pagetable_t , uint64 );
