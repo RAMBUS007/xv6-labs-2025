@@ -43,7 +43,7 @@ binit(void)
   char lockname[16];
 
   for (int i = 0;i < NBUCKET;i++){
-    snprintf(lockname, sizeof(lockname), "bcahe_%d", i);
+    // snprintf(lockname, sizeof(lockname), "bcahe_%d", i);
     initlock(&bcache.buckets[i].lock,lockname);
 
     bcache.buckets[i].head.prev = &bcache.buckets[i].head;
