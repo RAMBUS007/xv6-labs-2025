@@ -52,8 +52,7 @@ usertrap(void)
   
   if(r_scause() == 8){
     // system call
-    // printf("here r_scause=8\n");
-    // printf("p-killed:%d\n",p->killed);
+
     if(p->killed)
       exit(-1);
 
@@ -68,46 +67,14 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if(r_scause() == 13 || r_scause() == 15){
-    
-    // 出现报错的虚拟地址
-    uint64 va = r_stval();
-    // 虚拟地址高于sbrk分配的虚拟地址则杀死进程
-    if(va < PGROUNDUP(p->trapframe->sp) || va > p->sz){
-      p->killed = 1;
-      goto end;
-
-    }else{
-      // 申请1页物理内存
-      char* pa = kalloc();
-      if(pa == 0){ // 申请不成功
-        printf("alloc physical memory failed");
-        p->killed = 1;
-        goto end;
-      }
-      // 初始化物理内存
-      memset(pa, 0, PGSIZE);
-      // 映射, 将出错的虚拟地址向下舍入到页面边界,因为va所在的这一页还没有对应的物理内存
-      if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)pa, PTE_W|PTE_X|PTE_R|PTE_U)){
-        // 映射失败，释放物理内存
-        kfree(pa);
-        p->killed = 1;
-        goto end;
-      }
-    }
-    
-
-  }else {
+  } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
-end:
-  if(p->killed){
+  if(p->killed)
     exit(-1);
-  }
-    
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
