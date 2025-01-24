@@ -141,9 +141,6 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
-  // 设置 vma 数组
-  memset(&p->mmap_vams, 0, sizeof(p->mmap_vams));
-
   return p;
 }
 
@@ -286,7 +283,6 @@ fork(void)
 
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
-    // 这里不会复制 vma 数据，因为 vma 小于 sz
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -318,17 +314,6 @@ fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
-  
-  // 直接复制 vma 就好了
-  // 到时候也会触发缺页错误来懒分配
-  // 因为对应的虚拟地址在子进程中没有分配
-  for (int i = 0; i < VMA_SZ; i++){
-    if(p->mmap_vams[i].in_use){
-      np->mmap_vams[i] = p->mmap_vams[i]; 
-      filedup(p->mmap_vams[i].file);
-      // 复制 vma
-    }
-  }
 
   return pid;
 }
@@ -354,23 +339,10 @@ reparent(struct proc *p)
 void
 exit(int status)
 {
-  // 在这里释放 vma 而不是 freeproc 是因为
-  // 只有父进程 wait 了才会调用 freeproc
-  // 如果一直没有 wait，那么 mmap 的文件就无法写回文件中
-  // 不过主要还是因为提示。。
   struct proc *p = myproc();
 
   if(p == initproc)
     panic("init exiting");
-
-  // 释放和写回 mmap 数据需要在关闭文件之前
-  for(int i = 0; i < VMA_SZ; i++){
-    if(p->mmap_vams[i].in_use){
-      if(munmap(p->mmap_vams[i].sta_addr, p->mmap_vams[i].sz) < 0){
-        panic("exit: munmap");
-      } 
-    }
-  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
@@ -397,7 +369,7 @@ exit(int status)
   acquire(&p->lock);
 
   p->xstate = status;
-  p->state = ZOMBIE; // 父进程会处理
+  p->state = ZOMBIE;
 
   release(&wait_lock);
 
@@ -435,7 +407,7 @@ wait(uint64 addr)
             release(&wait_lock);
             return -1;
           }
-          freeproc(np); // 只有父进程 wait 的时候才会去 freeproc
+          freeproc(np);
           release(&np->lock);
           release(&wait_lock);
           return pid;
