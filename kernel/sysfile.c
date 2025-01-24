@@ -16,6 +16,9 @@
 #include "file.h"
 #include "fcntl.h"
 
+#define FDEBUG
+#include "dbg_macros.h"
+#include "memlayout.h"
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -316,41 +319,6 @@ sys_open(void)
     }
   }
 
-  if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW))
-  {
-    int depth = 100;
-    char path[MAXPATH];
-    
-    for(int i = 0; i < depth; ++i)
-    {
-      if(readi(ip, 0, (uint64)path, 0, MAXPATH) != MAXPATH)
-      {
-        iunlockput(ip);
-        end_op();
-        return -1;
-      }
-
-      iunlockput(ip);
-
-      ip = namei(path);
-      if(ip == 0)
-      {
-        end_op();
-        return -1;
-      }
-      ilock(ip);
-      if(ip->type != T_SYMLINK)
-        break;
-
-      if(i == depth - 1)
-      {
-        iunlockput(ip);
-        end_op();
-        return -1;
-      }
-    }
-  }
-
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
     end_op();
@@ -520,46 +488,89 @@ sys_pipe(void)
   return 0;
 }
 
+
+uint64 
+sys_mmap(){
+  uint64 addr, length, offset; // addr 和 offset 都只有 0
+  int prot, flags, fd;
+  struct file* file;
+  //void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+  try(argaddr(0, &addr), return -1)
+  try(argaddr(1, &length), return -1)
+  try(argint(2, &prot), return -1)
+  try(argint(3, &flags), return -1)
+  try(argfd(4, &fd, &file), return -1)
+  try(argaddr(5, &offset), return -1)
+  // 读入参数
+
+  struct proc* p = myproc();
+
+  if(addr || offset) 
+    return -1;
+  if(!file->writable && (prot & PROT_WRITE) && (flags & MAP_SHARED))
+    return -1;
+
+  int unuse_idx = -1;
+  
+  uint64 mn_mmap = TRAPFRAME; // 最小的 mmap 开始地址
+  for(int i = 0; i < VMA_SZ; i++){
+    if(!p->mmap_vams[i].in_use){
+      unuse_idx = i; 
+    } else if(p->mmap_vams[i].sta_addr < mn_mmap){
+      mn_mmap = PGROUNDDOWN(p->mmap_vams[i].sta_addr); // 当前分配的 mmap 内存不会超过这个地址
+    }
+  }
+  if(unuse_idx == -1)
+    return -1;
+  if(mn_mmap - length <= p->sz) // 没内存来 mmap 了
+    return -1;
+
+  struct mmap_vma* cur_vma = &p->mmap_vams[unuse_idx];
+  cur_vma->file = file;
+  cur_vma->in_use = 1;
+  cur_vma->prot = prot;
+  cur_vma->flags = flags;
+  cur_vma->sta_addr = mn_mmap - length; 
+  cur_vma->sz = length;
+
+  filedup(file);
+
+  return cur_vma->sta_addr;
+} 
+
+
 uint64
-sys_symlink(void)
-{
-  char target[MAXPATH];
-  char path[MAXPATH];
+munmap(uint64 addr, uint64 len){
+  struct proc* p = myproc();
+  struct mmap_vma* cur_vma = get_vma_by_addr(addr);
+  if(!cur_vma)
+    return -1;
 
-  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
-  {
+  if(addr > cur_vma->sta_addr && addr + len < cur_vma->sta_addr + cur_vma->sz){
+    // 从中间挖洞
     return -1;
   }
-    
-/*
- *
- *called at the start of each FS system call
- *因为文件系统操作并不是直接执行的，而是放到一个缓存文件中
- *操作添加完后再提交执行
- *
- */  
-  begin_op();
-
-  struct inode *ip;
-
-  if((ip = create(path, T_SYMLINK, 0, 0)) == 0 )
-  {
-    end_op();
-    return -1;
+  
+  mmap_writeback(p->pagetable, addr, len, cur_vma);
+ 
+  if(addr == cur_vma->sta_addr){ // 起始位置删除的
+    cur_vma->sta_addr += len;
+  } 
+  cur_vma->sz -= len;
+  
+  if(cur_vma->sz <= 0){
+    fileclose(cur_vma->file);
+    cur_vma->in_use = 0;
   }
+  return 0;  
+}
 
-  if(writei(ip, 0, (uint64)target, 0, MAXPATH) < MAXPATH)
-  {
-    iunlockput(ip);
-    end_op();
-    return -1;
-  }
-/*
- *
- *create默认上锁返回，记得解锁
- *
- */
-  iunlockput(ip);
-  end_op();
-  return 0;
+uint64
+sys_munmap(){
+  // int munmap(void *addr, size_t length);
+  uint64 addr;
+  uint64 len;
+  try(argaddr(0, &addr),  return -1)
+  try(argaddr(1, &len), return -1)
+  return munmap(addr, len);
 }
