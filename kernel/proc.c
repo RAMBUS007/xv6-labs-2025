@@ -5,8 +5,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-#define FDEBUG
-#include "dbg_macros.h"
 
 struct cpu cpus[NCPU];
 
@@ -368,7 +366,9 @@ exit(int status)
   // 释放和写回 mmap 数据需要在关闭文件之前
   for(int i = 0; i < VMA_SZ; i++){
     if(p->mmap_vams[i].in_use){
-      try(munmap(p->mmap_vams[i].sta_addr, p->mmap_vams[i].sz), panic("exit: munmap"));
+      if(munmap(p->mmap_vams[i].sta_addr, p->mmap_vams[i].sz) < 0){
+        panic("exit: munmap");
+      } 
     }
   }
 

@@ -1,4 +1,4 @@
-#define FDEBUG
+
 #include "types.h"
 #include "param.h"
 #include "memlayout.h"
@@ -13,7 +13,7 @@
 #include "fs.h"
 #include "file.h"
 
-#include "dbg_macros.h"
+
 
 struct spinlock tickslock;
 uint ticks;
@@ -77,7 +77,9 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else if ((r_scause() == 13 || r_scause() == 15)){
-    try(mmap_fault_handler(r_stval()), bad = 1)
+    if(mmap_fault_handler(r_stval()) < 0){
+      bad = 1;
+    }
   }
   else{
     bad = 1;
@@ -234,7 +236,7 @@ devintr()
   }
 }
 
-struct mmap_vam* 
+struct mmap_vma* 
 get_vma_by_addr(uint64 addr){
 // 接收一个地址，判断这个地址属于哪个 vma
   struct proc* p = myproc();
@@ -255,20 +257,17 @@ mmap_fault_handler(uint64 addr){
   }
 
   if(!cur_vma->file->readable && r_scause() == 13 && cur_vma->flags & MAP_SHARED){
-    DEBUG("mmap_fault_handler: not readable\n");
     return -1;
   } // 读错误
     
   if(!cur_vma->file->writable && r_scause() == 15 && cur_vma->flags & MAP_SHARED){
-    DEBUG("mmap_fault_handler: not writable\n");
     return -1;
   }
     
 
   uint64 pg_sta = PGROUNDDOWN(addr);
-  uint64 pa = kalloc();
+  char* pa = kalloc();
   if(!pa){
-    DEBUG("mmap_fault_handler: kalloc failed\n");
     return -1;
   }
   memset(pa, 0, PGSIZE);
@@ -285,14 +284,13 @@ mmap_fault_handler(uint64 addr){
 
   ilock(cur_vma->file->ip);
   int rdret;
-  if((rdret = readi(cur_vma->file->ip, 0, pa, off, PGSIZE)) == 0){
-    DEBUG("mmap_fault_handler: readi fail\n");
+  if((rdret = readi(cur_vma->file->ip, 0, (uint64)pa, off, PGSIZE)) == 0){
     iunlock(cur_vma->file->ip);
     return -1;
   }
 
   iunlock(cur_vma->file->ip); // 没有 put 是这个文件之后还需要使用
                               // 在 unmap 中应该可以 put
-  mappages(p->pagetable, pg_sta, PGSIZE, pa, perm);
+  mappages(p->pagetable, pg_sta, PGSIZE, (uint64)pa, perm);
   return 0;
 }

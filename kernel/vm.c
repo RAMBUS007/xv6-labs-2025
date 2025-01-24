@@ -14,8 +14,7 @@
 #include "sleeplock.h"
 #include "file.h"
 
-#define FDEBUG
-#include "dbg_macros.h"
+
 
 /*
  * the kernel's page table.
@@ -452,7 +451,7 @@ mmap_writeback(pagetable_t pt, uint64 src_va, uint64 len, struct mmap_vma* vma){
   uint64 a;
   pte_t *pte;
   for(a = PGROUNDDOWN(src_va); a < PGROUNDUP(src_va + len); a += PGSIZE){
-    DEBUG("mmap a: %p\n", a); 
+    
     if((pte = walk(pt, a, 0)) == 0){ // 多写了一个等号
       panic("mmap_writeback: walk");
     } // 可能是懒分配
@@ -482,7 +481,7 @@ mmap_writeback(pagetable_t pt, uint64 src_va, uint64 len, struct mmap_vma* vma){
       iunlock(vma->file->ip);
       end_op();
     }
-    kfree(PTE2PA(*pte));
+    kfree((void*)PTE2PA(*pte));
     *pte = 0;
   }
   return 0;

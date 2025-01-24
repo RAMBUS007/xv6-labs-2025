@@ -15,9 +15,6 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
-
-#define FDEBUG
-#include "dbg_macros.h"
 #include "memlayout.h"
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -495,12 +492,12 @@ sys_mmap(){
   int prot, flags, fd;
   struct file* file;
   //void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-  try(argaddr(0, &addr), return -1)
-  try(argaddr(1, &length), return -1)
-  try(argint(2, &prot), return -1)
-  try(argint(3, &flags), return -1)
-  try(argfd(4, &fd, &file), return -1)
-  try(argaddr(5, &offset), return -1)
+  if(argaddr(0, &addr) < 0) return -1;
+  if(argaddr(1, &length) < 0) return -1;
+  if(argint(2, &prot) < 0) return -1;
+  if(argint(3, &flags) < 0) return -1;
+  if(argfd(4, &fd, &file) < 0) return -1;
+  if(argaddr(5, &offset) < 0) return -1;
   // 读入参数
 
   struct proc* p = myproc();
@@ -570,7 +567,7 @@ sys_munmap(){
   // int munmap(void *addr, size_t length);
   uint64 addr;
   uint64 len;
-  try(argaddr(0, &addr),  return -1)
-  try(argaddr(1, &len), return -1)
+  if(argaddr(0, &addr) < 0) return -1;
+  if(argaddr(1, &len) < 0) return -1;
   return munmap(addr, len);
 }
