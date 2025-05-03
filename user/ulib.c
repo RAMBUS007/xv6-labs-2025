@@ -1,7 +1,13 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "kernel/fcntl.h"
+#ifdef LAB_PGTBL
+#include "kernel/riscv.h"
+#include "kernel/memlayout.h"
+#endif
 #include "user/user.h"
+
+
 
 char*
 strcpy(char *s, const char *t)
@@ -103,7 +109,43 @@ memmove(void *vdst, const void *vsrc, int n)
 
   dst = vdst;
   src = vsrc;
-  while(n-- > 0)
-    *dst++ = *src++;
+  if (src > dst) {
+    while(n-- > 0)
+      *dst++ = *src++;
+  } else {
+    dst += n;
+    src += n;
+    while(n-- > 0)
+      *--dst = *--src;
+  }
   return vdst;
 }
+
+int
+memcmp(const void *s1, const void *s2, uint n)
+{
+  const char *p1 = s1, *p2 = s2;
+  while (n-- > 0) {
+    if (*p1 != *p2) {
+      return *p1 - *p2;
+    }
+    p1++;
+    p2++;
+  }
+  return 0;
+}
+
+void *
+memcpy(void *dst, const void *src, uint n)
+{
+  return memmove(dst, src, n);
+}
+
+#ifdef LAB_PGTBL
+int
+ugetpid(void)
+{
+  struct usyscall *u = (struct usyscall *)USYSCALL;
+  return u->pid;
+}
+#endif

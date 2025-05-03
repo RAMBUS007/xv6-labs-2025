@@ -35,18 +35,23 @@ def test(points, title=None, parent=None):
 
             # Handle test dependencies
             if run_test.complete:
-                return
+                return run_test.ok
             run_test.complete = True
+            parent_failed = False
             if parent:
-                parent()
+                parent_failed = not parent()
 
             # Run the test
             fail = None
             start = time.time()
             CURRENT_TEST = run_test
-            sys.stdout.write("%s: " % title)
+            sys.stdout.write("== Test %s == " % title)
+            if parent:
+                sys.stdout.write("\n")
             sys.stdout.flush()
             try:
+                if parent_failed:
+                    raise AssertionError('Parent failed: %s' % parent.__name__)
                 fn()
             except AssertionError as e:
                 fail = str(e)
@@ -54,8 +59,8 @@ def test(points, title=None, parent=None):
             # Display and handle test result
             POSSIBLE += points
             if points:
-                print("%s" % \
-                    (color("red", "FAIL") if fail else color("green", "OK")), end=' ')
+                print("%s: %s" % (title, \
+                    (color("red", "FAIL") if fail else color("green", "OK"))), end=' ')
             if time.time() - start > 0.1:
                 print("(%.1fs)" % (time.time() - start), end=' ')
             print()
@@ -67,10 +72,14 @@ def test(points, title=None, parent=None):
                 callback(fail)
             CURRENT_TEST = None
 
+            run_test.ok = not fail
+            return run_test.ok
+
         # Record test metadata on the test wrapper function
         run_test.__name__ = fn.__name__
         run_test.title = title
         run_test.complete = False
+        run_test.ok = False
         run_test.on_finish = []
         TESTS.append(run_test)
         return run_test
@@ -191,7 +200,7 @@ def assert_lines_match(text, *regexps, **kw):
 # Utilities
 #
 
-__all__ += ["make", "maybe_unlink", "reset_fs", "color", "random_str"]
+__all__ += ["make", "maybe_unlink", "reset_fs", "color", "random_str", "check_time", "check_answers"]
 
 MAKE_TIMESTAMP = 0
 
@@ -238,6 +247,26 @@ def reset_fs():
 def random_str(n=8):
     letters = string.ascii_letters + string.digits
     return ''.join(random.choice(letters) for _ in range(n))
+
+def check_time():
+    try:
+        print("")
+        with open('time.txt') as f:
+            d = f.read().strip()
+            if not re.match(r'^\d+$', d):
+                raise AssertionError('time.txt does not contain a single integer (number of hours spent on the lab)')
+    except IOError:
+        raise AssertionError('Cannot read time.txt')
+
+def check_answers(file, n=10):
+    try:
+        with open(file) as f:
+            d = f.read().strip()
+            if len(d) < n:
+                raise AssertionError('%s does not seem to contain enough text' % file)
+    except IOError:
+        raise AssertionError('Cannot read %s' % file)
+
 
 ##################################################################
 # Controllers
@@ -409,7 +438,7 @@ class Runner():
             # Wait for QEMU to start or make to fail.  This will set
             # self.gdb if QEMU starts.
             self.qemu.on_output = [self.__monitor_start]
-            self.__react([self.qemu], timeout=30)
+            self.__react([self.qemu], timeout=90)
             self.qemu.on_output = []
             if self.gdb is None:
                 print("Failed to connect to QEMU; output:")
@@ -567,7 +596,7 @@ def shell_script(script, terminate_match=None):
         def handle_output(output):
             context.buf.extend(output)
             if terminate_match is not None:
-                if re.match(terminate_match, context.buf.decode('utf-8')):
+                if re.match(terminate_match, context.buf.decode('utf-8', 'replace')):
                     raise TerminateTest
             if b'$ ' in context.buf:
                 context.buf = bytearray()

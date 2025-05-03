@@ -22,7 +22,12 @@
 #define SYS_close  21
 
 // System calls for labs
-#define SYS_ntas   22
-#define SYS_crash  23
-#define SYS_mount  24
-#define SYS_umount 25
+#define SYS_trace     22
+#define SYS_sysinfo   23
+#define SYS_sigalarm  24
+#define SYS_sigreturn 25
+#define SYS_symlink   26
+#define SYS_mmap      27
+#define SYS_munmap    28
+#define SYS_connect   29
+#define SYS_pgaccess  30

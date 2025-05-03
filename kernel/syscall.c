@@ -20,7 +20,6 @@ fetchaddr(uint64 addr, uint64 *ip)
 }
 
 // Fetch the nul-terminated string at addr from the current process.
-// Doesn't actually copy the string - just sets *pp to point at it.
 // Returns length of string, not including nul, or -1 for error.
 int
 fetchstr(uint64 addr, char *buf, int max)
@@ -38,17 +37,17 @@ argraw(int n)
   struct proc *p = myproc();
   switch (n) {
   case 0:
-    return p->tf->a0;
+    return p->trapframe->a0;
   case 1:
-    return p->tf->a1;
+    return p->trapframe->a1;
   case 2:
-    return p->tf->a2;
+    return p->trapframe->a2;
   case 3:
-    return p->tf->a3;
+    return p->trapframe->a3;
   case 4:
-    return p->tf->a4;
+    return p->trapframe->a4;
   case 5:
-    return p->tf->a5;
+    return p->trapframe->a5;
   }
   panic("argraw");
   return -1;
@@ -105,8 +104,12 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
-extern uint64 sys_ntas(void);
-extern uint64 sys_crash(void);
+#ifdef LAB_NET
+extern uint64 sys_connect(void);
+#endif
+#ifdef LAB_PGTBL
+extern uint64 sys_pgaccess(void);
+#endif
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -130,9 +133,15 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_ntas]    sys_ntas,
-[SYS_crash]   sys_crash,
+#ifdef LAB_NET
+[SYS_connect] sys_connect,
+#endif
+#ifdef LAB_PGTBL
+[SYS_pgaccess] sys_pgaccess,
+#endif
 };
+
+
 
 void
 syscall(void)
@@ -140,12 +149,12 @@ syscall(void)
   int num;
   struct proc *p = myproc();
 
-  num = p->tf->a7;
+  num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    p->tf->a0 = syscalls[num]();
+    p->trapframe->a0 = syscalls[num]();
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);
-    p->tf->a0 = -1;
+    p->trapframe->a0 = -1;
   }
 }

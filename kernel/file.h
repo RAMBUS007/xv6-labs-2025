@@ -37,5 +37,4 @@ struct devsw {
 
 extern struct devsw devsw[];
 
-#define DISK 0
 #define CONSOLE 1
